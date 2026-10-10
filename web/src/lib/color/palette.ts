@@ -1,0 +1,26 @@
+export const palette = [
+  "#3a83ce",
+  "#35a98a",
+  "#d89439",
+  "#8576c7",
+  "#dc7479",
+  "#55a9b3",
+  "#c393b5",
+  "#90a74b",
+  "#de925e",
+  "#688cb9",
+  "#b9a062",
+  "#58967f",
+];
+export const groupColors: Record<string, string> = {
+  MPI: "#d9953d",
+  USER: "#4d91cf",
+  COMPILER: "#4d91cf",
+  OPENMP: "#8a7dc6",
+  PTHREAD: "#42a795",
+  CUDA: "#49aa87",
+  OPENCL: "#61acb4",
+  HIP: "#6ba379",
+  Application: "#4d91cf",
+  VT_API: "#b18eaf",
+};

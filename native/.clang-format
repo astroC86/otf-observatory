@@ -1,0 +1,6 @@
+# C formatting for native/: clang-format -i native/src/*.c native/fixtures/*.[ch]
+BasedOnStyle: LLVM
+IndentWidth: 4
+ColumnLimit: 100
+PointerAlignment: Right
+AllowShortFunctionsOnASingleLine: None

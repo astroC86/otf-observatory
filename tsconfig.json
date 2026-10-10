@@ -1,0 +1,38 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noEmit": true,
+    "forceConsistentCasingInFileNames": true,
+    "types": ["react", "react-dom"],
+    "typeRoots": [
+      "./node_modules/@types",
+      "/home/zalbanob/.hermes/hermes-agent/node_modules/@types"
+    ],
+    "paths": {
+      "react": [
+        "./node_modules/@types/react/index.d.ts",
+        "/home/zalbanob/.hermes/hermes-agent/node_modules/@types/react/index.d.ts"
+      ],
+      "react/*": [
+        "./node_modules/@types/react/*",
+        "/home/zalbanob/.hermes/hermes-agent/node_modules/@types/react/*"
+      ],
+      "react-dom": [
+        "./node_modules/@types/react-dom/index.d.ts",
+        "/home/zalbanob/.hermes/hermes-agent/node_modules/@types/react-dom/index.d.ts"
+      ],
+      "react-dom/*": [
+        "./node_modules/@types/react-dom/*",
+        "/home/zalbanob/.hermes/hermes-agent/node_modules/@types/react-dom/*"
+      ],
+      "*": ["./node_modules/*", "/home/zalbanob/.hermes/hermes-agent/node_modules/*"]
+    }
+  },
+  "include": ["web/src/**/*.ts", "web/src/**/*.tsx"]
+}

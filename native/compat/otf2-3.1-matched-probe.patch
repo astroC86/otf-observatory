@@ -1,0 +1,1811 @@
+--- a/src/otf2_events_int.h
++++ b/src/otf2_events_int.h
+@@ -130,7 +130,12 @@
+     OTF2_EVENT_COMM_CREATE                      = 87, /** Event record identifier for the CommCreate event. */
+     OTF2_EVENT_COMM_DESTROY                     = 88, /** Event record identifier for the CommDestroy event. */
+ 
+-    OTF2_EVENT_MAX_ID
++    
++OTF2_EVENT_MPI_PROBE = 89,  /** Event record identifier for the MpiProbe event. */
++    OTF2_EVENT_MPI_MRECV = 90,  /** Event record identifier for the MpiMrecv event. */
++    OTF2_EVENT_MPI_IMRECV_REQUEST = 91,  /** Event record identifier for the MpiImrecvRequest event. */
++    OTF2_EVENT_MPI_IMRECV = 92,  /** Event record identifier for the MpiImrecv event. */
++OTF2_EVENT_MAX_ID
+ };
+ 
+ 
+@@ -1029,6 +1034,48 @@
+ } OTF2_CommDestroy;
+ 
+ 
++
++/** @brief MpiProbe event.
++ */
++typedef struct OTF2_MpiProbe_struct
++{
++    /** Timestamp, which is exactly here in every event record */
++    OTF2_TimeStamp time;
++    uint32_t sender;
++    OTF2_CommRef communicator;
++    uint32_t tag;
++    uint64_t message_id;
++} OTF2_MpiProbe;
++
++/** @brief MpiMrecv event.
++ */
++typedef struct OTF2_MpiMrecv_struct
++{
++    /** Timestamp, which is exactly here in every event record */
++    OTF2_TimeStamp time;
++    uint64_t message_id;
++    uint64_t msg_length;
++} OTF2_MpiMrecv;
++
++/** @brief MpiImrecvRequest event.
++ */
++typedef struct OTF2_MpiImrecvRequest_struct
++{
++    /** Timestamp, which is exactly here in every event record */
++    OTF2_TimeStamp time;
++    uint64_t message_id;
++    uint64_t request_id;
++} OTF2_MpiImrecvRequest;
++
++/** @brief MpiImrecv event.
++ */
++typedef struct OTF2_MpiImrecv_struct
++{
++    /** Timestamp, which is exactly here in every event record */
++    OTF2_TimeStamp time;
++    uint64_t request_id;
++    uint64_t msg_length;
++} OTF2_MpiImrecv;
+ typedef struct OTF2_GenericEvent_struct OTF2_GenericEvent;
+ 
+ 
+@@ -1117,7 +1164,12 @@
+         OTF2_NonBlockingCollectiveComplete non_blocking_collective_complete;
+         OTF2_CommCreate                    comm_create;
+         OTF2_CommDestroy                   comm_destroy;
+-    } record;
++    
++OTF2_MpiProbe mpi_probe;
++        OTF2_MpiMrecv mpi_mrecv;
++        OTF2_MpiImrecvRequest mpi_imrecv_request;
++        OTF2_MpiImrecv mpi_imrecv;
++} record;
+ };
+ 
+ 
+@@ -1203,6 +1255,11 @@
+     OTF2_EvtReaderCallback_NonBlockingCollectiveComplete non_blocking_collective_complete;
+     OTF2_EvtReaderCallback_CommCreate                    comm_create;
+     OTF2_EvtReaderCallback_CommDestroy                   comm_destroy;
++
++OTF2_EvtReaderCallback_MpiProbe mpi_probe;
++    OTF2_EvtReaderCallback_MpiMrecv mpi_mrecv;
++    OTF2_EvtReaderCallback_MpiImrecvRequest mpi_imrecv_request;
++    OTF2_EvtReaderCallback_MpiImrecv mpi_imrecv;
+ };
+ 
+ 
+@@ -1288,6 +1345,11 @@
+     OTF2_GlobalEvtReaderCallback_NonBlockingCollectiveComplete non_blocking_collective_complete;
+     OTF2_GlobalEvtReaderCallback_CommCreate                    comm_create;
+     OTF2_GlobalEvtReaderCallback_CommDestroy                   comm_destroy;
++
++OTF2_GlobalEvtReaderCallback_MpiProbe mpi_probe;
++    OTF2_GlobalEvtReaderCallback_MpiMrecv mpi_mrecv;
++    OTF2_GlobalEvtReaderCallback_MpiImrecvRequest mpi_imrecv_request;
++    OTF2_GlobalEvtReaderCallback_MpiImrecv mpi_imrecv;
+ };
+ 
+ 
+--- a/include/otf2/OTF2_EvtReaderCallbacks.h
++++ b/include/otf2/OTF2_EvtReaderCallbacks.h
+@@ -4575,6 +4575,205 @@
+     OTF2_EvtReaderCallback_CommDestroy commDestroyCallback );
+ 
+ 
++
++/** @brief Callback for the MpiProbe event record.
++ *
++ *  Matched-probe compatibility record; see viewer offline evidence.
++ *  
++ *  @param location      The location where this event happened.
++ *  @param time          The time when this event happened.
++ *  @param eventPosition The event position of this event in the trace. Starting
++ *                       with 1.
++ *  @param userData      User data as set by
++ *                       @eref{OTF2_Reader_RegisterEvtCallbacks} or
++ *                       @eref{OTF2_EvtReader_SetCallbacks}.
++ *  @param attributeList Additional attributes for this event.
++ *  @param sender        Recorded sender.
++ *  @param communicator  Communicator reference. References a @eref{Comm}, or a
++ *                       @eref{InterComm} definition and will be mapped to
++ *                       the global definition if a mapping table of type
++ *                       @eref{OTF2_MAPPING_COMM} is available.
++ *  @param tag           Recorded tag.
++ *  @param messageId     Recorded messageId.
++ *
++ *  @since Version 3.2
++ *
++ *  @return @eref{OTF2_CALLBACK_SUCCESS} or @eref{OTF2_CALLBACK_INTERRUPT}.
++ */
++typedef OTF2_CallbackCode
++( *OTF2_EvtReaderCallback_MpiProbe )( OTF2_LocationRef    location,
++                                            OTF2_TimeStamp      time,
++                                            uint64_t            eventPosition,
++                                            void*               userData,
++                                            OTF2_AttributeList* attributeList,
++uint32_t sender,
++OTF2_CommRef communicator,
++uint32_t tag,
++uint64_t messageId );
++
++
++/** @brief Registers the callback for the MpiProbe event.
++ *  
++ *  @param evtReaderCallbacks Struct for all callbacks.
++ *  @param mpiProbeCallback   Function which should be called for all
++ *                            @eref{MpiProbe} definitions.
++ *
++ *  @since Version 3.2
++ *
++ *  @retbegin
++ *    @retcode{OTF2_SUCCESS, if successful}
++ *    @retcode{OTF2_ERROR_INVALID_ARGUMENT,
++ *             for an invalid @p defReaderCallbacks argument}
++ *  @retend
++ */
++OTF2_ErrorCode
++OTF2_EvtReaderCallbacks_SetMpiProbeCallback(
++    OTF2_EvtReaderCallbacks*              evtReaderCallbacks,
++    OTF2_EvtReaderCallback_MpiProbe mpiProbeCallback );
++
++/** @brief Callback for the MpiMrecv event record.
++ *
++ *  Matched-probe compatibility record; see viewer offline evidence.
++ *  
++ *  @param location      The location where this event happened.
++ *  @param time          The time when this event happened.
++ *  @param eventPosition The event position of this event in the trace. Starting
++ *                       with 1.
++ *  @param userData      User data as set by
++ *                       @eref{OTF2_Reader_RegisterEvtCallbacks} or
++ *                       @eref{OTF2_EvtReader_SetCallbacks}.
++ *  @param attributeList Additional attributes for this event.
++ *  @param messageId     Recorded messageId.
++ *  @param msgLength     Recorded msgLength.
++ *
++ *  @since Version 3.2
++ *
++ *  @return @eref{OTF2_CALLBACK_SUCCESS} or @eref{OTF2_CALLBACK_INTERRUPT}.
++ */
++typedef OTF2_CallbackCode
++( *OTF2_EvtReaderCallback_MpiMrecv )( OTF2_LocationRef    location,
++                                            OTF2_TimeStamp      time,
++                                            uint64_t            eventPosition,
++                                            void*               userData,
++                                            OTF2_AttributeList* attributeList,
++uint64_t messageId,
++uint64_t msgLength );
++
++
++/** @brief Registers the callback for the MpiMrecv event.
++ *  
++ *  @param evtReaderCallbacks Struct for all callbacks.
++ *  @param mpiMrecvCallback   Function which should be called for all
++ *                            @eref{MpiMrecv} definitions.
++ *
++ *  @since Version 3.2
++ *
++ *  @retbegin
++ *    @retcode{OTF2_SUCCESS, if successful}
++ *    @retcode{OTF2_ERROR_INVALID_ARGUMENT,
++ *             for an invalid @p defReaderCallbacks argument}
++ *  @retend
++ */
++OTF2_ErrorCode
++OTF2_EvtReaderCallbacks_SetMpiMrecvCallback(
++    OTF2_EvtReaderCallbacks*              evtReaderCallbacks,
++    OTF2_EvtReaderCallback_MpiMrecv mpiMrecvCallback );
++
++/** @brief Callback for the MpiImrecvRequest event record.
++ *
++ *  Matched-probe compatibility record; see viewer offline evidence.
++ *  
++ *  @param location      The location where this event happened.
++ *  @param time          The time when this event happened.
++ *  @param eventPosition The event position of this event in the trace. Starting
++ *                       with 1.
++ *  @param userData      User data as set by
++ *                       @eref{OTF2_Reader_RegisterEvtCallbacks} or
++ *                       @eref{OTF2_EvtReader_SetCallbacks}.
++ *  @param attributeList Additional attributes for this event.
++ *  @param messageId     Recorded messageId.
++ *  @param requestId     Recorded requestId.
++ *
++ *  @since Version 3.2
++ *
++ *  @return @eref{OTF2_CALLBACK_SUCCESS} or @eref{OTF2_CALLBACK_INTERRUPT}.
++ */
++typedef OTF2_CallbackCode
++( *OTF2_EvtReaderCallback_MpiImrecvRequest )( OTF2_LocationRef    location,
++                                            OTF2_TimeStamp      time,
++                                            uint64_t            eventPosition,
++                                            void*               userData,
++                                            OTF2_AttributeList* attributeList,
++uint64_t messageId,
++uint64_t requestId );
++
++
++/** @brief Registers the callback for the MpiImrecvRequest event.
++ *  
++ *  @param evtReaderCallbacks       Struct for all callbacks.
++ *  @param mpiImrecvRequestCallback Function which should be called for all
++ *                                  @eref{MpiImrecvRequest} definitions.
++ *
++ *  @since Version 3.2
++ *
++ *  @retbegin
++ *    @retcode{OTF2_SUCCESS, if successful}
++ *    @retcode{OTF2_ERROR_INVALID_ARGUMENT,
++ *             for an invalid @p defReaderCallbacks argument}
++ *  @retend
++ */
++OTF2_ErrorCode
++OTF2_EvtReaderCallbacks_SetMpiImrecvRequestCallback(
++    OTF2_EvtReaderCallbacks*              evtReaderCallbacks,
++    OTF2_EvtReaderCallback_MpiImrecvRequest mpiImrecvRequestCallback );
++
++/** @brief Callback for the MpiImrecv event record.
++ *
++ *  Matched-probe compatibility record; see viewer offline evidence.
++ *  
++ *  @param location      The location where this event happened.
++ *  @param time          The time when this event happened.
++ *  @param eventPosition The event position of this event in the trace. Starting
++ *                       with 1.
++ *  @param userData      User data as set by
++ *                       @eref{OTF2_Reader_RegisterEvtCallbacks} or
++ *                       @eref{OTF2_EvtReader_SetCallbacks}.
++ *  @param attributeList Additional attributes for this event.
++ *  @param requestId     Recorded requestId.
++ *  @param msgLength     Recorded msgLength.
++ *
++ *  @since Version 3.2
++ *
++ *  @return @eref{OTF2_CALLBACK_SUCCESS} or @eref{OTF2_CALLBACK_INTERRUPT}.
++ */
++typedef OTF2_CallbackCode
++( *OTF2_EvtReaderCallback_MpiImrecv )( OTF2_LocationRef    location,
++                                            OTF2_TimeStamp      time,
++                                            uint64_t            eventPosition,
++                                            void*               userData,
++                                            OTF2_AttributeList* attributeList,
++uint64_t requestId,
++uint64_t msgLength );
++
++
++/** @brief Registers the callback for the MpiImrecv event.
++ *  
++ *  @param evtReaderCallbacks Struct for all callbacks.
++ *  @param mpiImrecvCallback  Function which should be called for all
++ *                            @eref{MpiImrecv} definitions.
++ *
++ *  @since Version 3.2
++ *
++ *  @retbegin
++ *    @retcode{OTF2_SUCCESS, if successful}
++ *    @retcode{OTF2_ERROR_INVALID_ARGUMENT,
++ *             for an invalid @p defReaderCallbacks argument}
++ *  @retend
++ */
++OTF2_ErrorCode
++OTF2_EvtReaderCallbacks_SetMpiImrecvCallback(
++    OTF2_EvtReaderCallbacks*              evtReaderCallbacks,
++    OTF2_EvtReaderCallback_MpiImrecv mpiImrecvCallback );
+ #ifdef __cplusplus
+ }
+ #endif /* __cplusplus */
+--- a/src/OTF2_EvtReader_inc.c
++++ b/src/OTF2_EvtReader_inc.c
+@@ -6408,6 +6408,339 @@
+ }
+ 
+ 
++
++static inline OTF2_ErrorCode
++otf2_evt_reader_read_mpi_probe( OTF2_EvtReader* reader )
++{
++    UTILS_ASSERT( reader );
++    UTILS_ASSERT( reader->archive );
++
++    OTF2_MpiProbe* record = &reader->current_event.record.mpi_probe;
++
++    record->time = otf2_evt_reader_apply_clock_correction( reader, record->time );
++
++    OTF2_ErrorCode ret;
++    uint64_t          record_data_length;
++    /* Event contains separate record length information */
++    ret = OTF2_Buffer_GuaranteeRecord( reader->buffer, &record_data_length );
++    if ( OTF2_SUCCESS != ret )
++    {
++        return UTILS_ERROR( ret, "Could not read MpiProbe record. Not enough memory in buffer" );
++    }
++    uint8_t* record_end_pos;
++    OTF2_Buffer_GetPosition( reader->buffer, &record_end_pos );
++    record_end_pos += record_data_length;
++
++    ret = OTF2_Buffer_ReadUint32( reader->buffer, &record->sender );
++    if ( OTF2_SUCCESS != ret )
++    {
++        return UTILS_ERROR( ret, "Could not read sender attribute of MpiProbe record. Invalid compression size." );
++    }
++    ret = OTF2_Buffer_ReadUint32( reader->buffer, &record->communicator );
++    if ( OTF2_SUCCESS != ret )
++    {
++        return UTILS_ERROR( ret, "Could not read communicator attribute of MpiProbe record. Invalid compression size." );
++    }
++    record->communicator = otf2_evt_reader_map( reader, OTF2_MAPPING_COMM, record->communicator );
++    ret = OTF2_Buffer_ReadUint32( reader->buffer, &record->tag );
++    if ( OTF2_SUCCESS != ret )
++    {
++        return UTILS_ERROR( ret, "Could not read tag attribute of MpiProbe record. Invalid compression size." );
++    }
++    ret = OTF2_Buffer_ReadUint64( reader->buffer, &record->message_id );
++    if ( OTF2_SUCCESS != ret )
++    {
++        return UTILS_ERROR( ret, "Could not read messageId attribute of MpiProbe record. Invalid compression size." );
++    }
++    uint8_t* viewer_record_read_pos;
++    OTF2_Buffer_GetPosition( reader->buffer, &viewer_record_read_pos );
++    if ( viewer_record_read_pos > record_end_pos )
++    {
++        return UTILS_ERROR( OTF2_ERROR_INVALID_DATA, "Matched-probe fields exceed record length." );
++    }
++    reader->global_event_position++;
++    reader->chunk_local_event_position++;
++
++    /*
++     * Always jump to the announced end of the record. This way, we skip
++     * future additions of attributes to this record.
++     */
++    ret = OTF2_Buffer_SetPosition( reader->buffer, record_end_pos );
++    if ( OTF2_SUCCESS != ret )
++    {
++        return UTILS_ERROR( ret, "Could not read record of unknown type." );
++    }
++
++    /*
++     * If a local event reader is operated by a global event reader,
++     * don't call our callback, don't clean up the attribute list and
++     * don't free any attribute arrays. Otherwise the global event reader
++     * will clean up the attribute list after he has triggered his callback.
++     */
++    if ( reader->operated )
++    {
++        return OTF2_SUCCESS;
++    }
++
++    OTF2_CallbackCode interrupt = OTF2_CALLBACK_SUCCESS;
++    if ( reader->reader_callbacks.mpi_probe )
++    {
++        interrupt = reader->reader_callbacks.mpi_probe( reader->location_id,
++                                                              record->time,
++                                                              reader->global_event_position,
++                                                              reader->user_data,
++                                                              &reader->attribute_list,
++record->sender,
++record->communicator,
++record->tag,
++record->message_id );
++    }
++    otf2_attribute_list_remove_all_attributes( &reader->attribute_list );
++
++    return OTF2_CALLBACK_SUCCESS == interrupt
++           ? OTF2_SUCCESS
++           : OTF2_ERROR_INTERRUPTED_BY_CALLBACK;
++}
++
++static inline OTF2_ErrorCode
++otf2_evt_reader_read_mpi_mrecv( OTF2_EvtReader* reader )
++{
++    UTILS_ASSERT( reader );
++    UTILS_ASSERT( reader->archive );
++
++    OTF2_MpiMrecv* record = &reader->current_event.record.mpi_mrecv;
++
++    record->time = otf2_evt_reader_apply_clock_correction( reader, record->time );
++
++    OTF2_ErrorCode ret;
++    uint64_t          record_data_length;
++    /* Event contains separate record length information */
++    ret = OTF2_Buffer_GuaranteeRecord( reader->buffer, &record_data_length );
++    if ( OTF2_SUCCESS != ret )
++    {
++        return UTILS_ERROR( ret, "Could not read MpiMrecv record. Not enough memory in buffer" );
++    }
++    uint8_t* record_end_pos;
++    OTF2_Buffer_GetPosition( reader->buffer, &record_end_pos );
++    record_end_pos += record_data_length;
++
++    ret = OTF2_Buffer_ReadUint64( reader->buffer, &record->message_id );
++    if ( OTF2_SUCCESS != ret )
++    {
++        return UTILS_ERROR( ret, "Could not read messageId attribute of MpiMrecv record. Invalid compression size." );
++    }
++    ret = OTF2_Buffer_ReadUint64( reader->buffer, &record->msg_length );
++    if ( OTF2_SUCCESS != ret )
++    {
++        return UTILS_ERROR( ret, "Could not read msgLength attribute of MpiMrecv record. Invalid compression size." );
++    }
++    uint8_t* viewer_record_read_pos;
++    OTF2_Buffer_GetPosition( reader->buffer, &viewer_record_read_pos );
++    if ( viewer_record_read_pos > record_end_pos )
++    {
++        return UTILS_ERROR( OTF2_ERROR_INVALID_DATA, "Matched-probe fields exceed record length." );
++    }
++    reader->global_event_position++;
++    reader->chunk_local_event_position++;
++
++    /*
++     * Always jump to the announced end of the record. This way, we skip
++     * future additions of attributes to this record.
++     */
++    ret = OTF2_Buffer_SetPosition( reader->buffer, record_end_pos );
++    if ( OTF2_SUCCESS != ret )
++    {
++        return UTILS_ERROR( ret, "Could not read record of unknown type." );
++    }
++
++    /*
++     * If a local event reader is operated by a global event reader,
++     * don't call our callback, don't clean up the attribute list and
++     * don't free any attribute arrays. Otherwise the global event reader
++     * will clean up the attribute list after he has triggered his callback.
++     */
++    if ( reader->operated )
++    {
++        return OTF2_SUCCESS;
++    }
++
++    OTF2_CallbackCode interrupt = OTF2_CALLBACK_SUCCESS;
++    if ( reader->reader_callbacks.mpi_mrecv )
++    {
++        interrupt = reader->reader_callbacks.mpi_mrecv( reader->location_id,
++                                                              record->time,
++                                                              reader->global_event_position,
++                                                              reader->user_data,
++                                                              &reader->attribute_list,
++record->message_id,
++record->msg_length );
++    }
++    otf2_attribute_list_remove_all_attributes( &reader->attribute_list );
++
++    return OTF2_CALLBACK_SUCCESS == interrupt
++           ? OTF2_SUCCESS
++           : OTF2_ERROR_INTERRUPTED_BY_CALLBACK;
++}
++
++static inline OTF2_ErrorCode
++otf2_evt_reader_read_mpi_imrecv_request( OTF2_EvtReader* reader )
++{
++    UTILS_ASSERT( reader );
++    UTILS_ASSERT( reader->archive );
++
++    OTF2_MpiImrecvRequest* record = &reader->current_event.record.mpi_imrecv_request;
++
++    record->time = otf2_evt_reader_apply_clock_correction( reader, record->time );
++
++    OTF2_ErrorCode ret;
++    uint64_t          record_data_length;
++    /* Event contains separate record length information */
++    ret = OTF2_Buffer_GuaranteeRecord( reader->buffer, &record_data_length );
++    if ( OTF2_SUCCESS != ret )
++    {
++        return UTILS_ERROR( ret, "Could not read MpiImrecvRequest record. Not enough memory in buffer" );
++    }
++    uint8_t* record_end_pos;
++    OTF2_Buffer_GetPosition( reader->buffer, &record_end_pos );
++    record_end_pos += record_data_length;
++
++    ret = OTF2_Buffer_ReadUint64( reader->buffer, &record->message_id );
++    if ( OTF2_SUCCESS != ret )
++    {
++        return UTILS_ERROR( ret, "Could not read messageId attribute of MpiImrecvRequest record. Invalid compression size." );
++    }
++    ret = OTF2_Buffer_ReadUint64( reader->buffer, &record->request_id );
++    if ( OTF2_SUCCESS != ret )
++    {
++        return UTILS_ERROR( ret, "Could not read requestId attribute of MpiImrecvRequest record. Invalid compression size." );
++    }
++    uint8_t* viewer_record_read_pos;
++    OTF2_Buffer_GetPosition( reader->buffer, &viewer_record_read_pos );
++    if ( viewer_record_read_pos > record_end_pos )
++    {
++        return UTILS_ERROR( OTF2_ERROR_INVALID_DATA, "Matched-probe fields exceed record length." );
++    }
++    reader->global_event_position++;
++    reader->chunk_local_event_position++;
++
++    /*
++     * Always jump to the announced end of the record. This way, we skip
++     * future additions of attributes to this record.
++     */
++    ret = OTF2_Buffer_SetPosition( reader->buffer, record_end_pos );
++    if ( OTF2_SUCCESS != ret )
++    {
++        return UTILS_ERROR( ret, "Could not read record of unknown type." );
++    }
++
++    /*
++     * If a local event reader is operated by a global event reader,
++     * don't call our callback, don't clean up the attribute list and
++     * don't free any attribute arrays. Otherwise the global event reader
++     * will clean up the attribute list after he has triggered his callback.
++     */
++    if ( reader->operated )
++    {
++        return OTF2_SUCCESS;
++    }
++
++    OTF2_CallbackCode interrupt = OTF2_CALLBACK_SUCCESS;
++    if ( reader->reader_callbacks.mpi_imrecv_request )
++    {
++        interrupt = reader->reader_callbacks.mpi_imrecv_request( reader->location_id,
++                                                              record->time,
++                                                              reader->global_event_position,
++                                                              reader->user_data,
++                                                              &reader->attribute_list,
++record->message_id,
++record->request_id );
++    }
++    otf2_attribute_list_remove_all_attributes( &reader->attribute_list );
++
++    return OTF2_CALLBACK_SUCCESS == interrupt
++           ? OTF2_SUCCESS
++           : OTF2_ERROR_INTERRUPTED_BY_CALLBACK;
++}
++
++static inline OTF2_ErrorCode
++otf2_evt_reader_read_mpi_imrecv( OTF2_EvtReader* reader )
++{
++    UTILS_ASSERT( reader );
++    UTILS_ASSERT( reader->archive );
++
++    OTF2_MpiImrecv* record = &reader->current_event.record.mpi_imrecv;
++
++    record->time = otf2_evt_reader_apply_clock_correction( reader, record->time );
++
++    OTF2_ErrorCode ret;
++    uint64_t          record_data_length;
++    /* Event contains separate record length information */
++    ret = OTF2_Buffer_GuaranteeRecord( reader->buffer, &record_data_length );
++    if ( OTF2_SUCCESS != ret )
++    {
++        return UTILS_ERROR( ret, "Could not read MpiImrecv record. Not enough memory in buffer" );
++    }
++    uint8_t* record_end_pos;
++    OTF2_Buffer_GetPosition( reader->buffer, &record_end_pos );
++    record_end_pos += record_data_length;
++
++    ret = OTF2_Buffer_ReadUint64( reader->buffer, &record->request_id );
++    if ( OTF2_SUCCESS != ret )
++    {
++        return UTILS_ERROR( ret, "Could not read requestId attribute of MpiImrecv record. Invalid compression size." );
++    }
++    ret = OTF2_Buffer_ReadUint64( reader->buffer, &record->msg_length );
++    if ( OTF2_SUCCESS != ret )
++    {
++        return UTILS_ERROR( ret, "Could not read msgLength attribute of MpiImrecv record. Invalid compression size." );
++    }
++    uint8_t* viewer_record_read_pos;
++    OTF2_Buffer_GetPosition( reader->buffer, &viewer_record_read_pos );
++    if ( viewer_record_read_pos > record_end_pos )
++    {
++        return UTILS_ERROR( OTF2_ERROR_INVALID_DATA, "Matched-probe fields exceed record length." );
++    }
++    reader->global_event_position++;
++    reader->chunk_local_event_position++;
++
++    /*
++     * Always jump to the announced end of the record. This way, we skip
++     * future additions of attributes to this record.
++     */
++    ret = OTF2_Buffer_SetPosition( reader->buffer, record_end_pos );
++    if ( OTF2_SUCCESS != ret )
++    {
++        return UTILS_ERROR( ret, "Could not read record of unknown type." );
++    }
++
++    /*
++     * If a local event reader is operated by a global event reader,
++     * don't call our callback, don't clean up the attribute list and
++     * don't free any attribute arrays. Otherwise the global event reader
++     * will clean up the attribute list after he has triggered his callback.
++     */
++    if ( reader->operated )
++    {
++        return OTF2_SUCCESS;
++    }
++
++    OTF2_CallbackCode interrupt = OTF2_CALLBACK_SUCCESS;
++    if ( reader->reader_callbacks.mpi_imrecv )
++    {
++        interrupt = reader->reader_callbacks.mpi_imrecv( reader->location_id,
++                                                              record->time,
++                                                              reader->global_event_position,
++                                                              reader->user_data,
++                                                              &reader->attribute_list,
++record->request_id,
++record->msg_length );
++    }
++    otf2_attribute_list_remove_all_attributes( &reader->attribute_list );
++
++    return OTF2_CALLBACK_SUCCESS == interrupt
++           ? OTF2_SUCCESS
++           : OTF2_ERROR_INTERRUPTED_BY_CALLBACK;
++}
+ OTF2_ErrorCode
+ otf2_evt_reader_read( OTF2_EvtReader* reader )
+ {
+@@ -6694,7 +7027,21 @@
+             return otf2_evt_reader_read_comm_create( reader );
+ 
+         case OTF2_EVENT_COMM_DESTROY:
+-            return otf2_evt_reader_read_comm_destroy( reader );
++            return otf2_evt_reader_read_comm_destroy
++( reader );
++
++        case OTF2_EVENT_MPI_PROBE:
++            return otf2_evt_reader_read_mpi_probe( reader );
++
++        case OTF2_EVENT_MPI_MRECV:
++            return otf2_evt_reader_read_mpi_mrecv( reader );
++
++        case OTF2_EVENT_MPI_IMRECV_REQUEST:
++            return otf2_evt_reader_read_mpi_imrecv_request( reader );
++
++        case OTF2_EVENT_MPI_IMRECV:
++            return otf2_evt_reader_read_mpi_imrecv
++( reader );
+ 
+         default:
+             return otf2_evt_reader_read_unknown( reader );
+@@ -8043,3 +8390,67 @@
+ 
+     return OTF2_SUCCESS;
+ }
++
++OTF2_ErrorCode
++OTF2_EvtReaderCallbacks_SetMpiProbeCallback(
++    OTF2_EvtReaderCallbacks*              evtReaderCallbacks,
++    OTF2_EvtReaderCallback_MpiProbe mpiProbeCallback )
++{
++    if ( !evtReaderCallbacks )
++    {
++        return UTILS_ERROR( OTF2_ERROR_INVALID_ARGUMENT,
++                            "Invalid evtReaderCallbacks argument!" );
++    }
++
++    evtReaderCallbacks->mpi_probe = mpiProbeCallback;
++
++    return OTF2_SUCCESS;
++}
++
++OTF2_ErrorCode
++OTF2_EvtReaderCallbacks_SetMpiMrecvCallback(
++    OTF2_EvtReaderCallbacks*              evtReaderCallbacks,
++    OTF2_EvtReaderCallback_MpiMrecv mpiMrecvCallback )
++{
++    if ( !evtReaderCallbacks )
++    {
++        return UTILS_ERROR( OTF2_ERROR_INVALID_ARGUMENT,
++                            "Invalid evtReaderCallbacks argument!" );
++    }
++
++    evtReaderCallbacks->mpi_mrecv = mpiMrecvCallback;
++
++    return OTF2_SUCCESS;
++}
++
++OTF2_ErrorCode
++OTF2_EvtReaderCallbacks_SetMpiImrecvRequestCallback(
++    OTF2_EvtReaderCallbacks*              evtReaderCallbacks,
++    OTF2_EvtReaderCallback_MpiImrecvRequest mpiImrecvRequestCallback )
++{
++    if ( !evtReaderCallbacks )
++    {
++        return UTILS_ERROR( OTF2_ERROR_INVALID_ARGUMENT,
++                            "Invalid evtReaderCallbacks argument!" );
++    }
++
++    evtReaderCallbacks->mpi_imrecv_request = mpiImrecvRequestCallback;
++
++    return OTF2_SUCCESS;
++}
++
++OTF2_ErrorCode
++OTF2_EvtReaderCallbacks_SetMpiImrecvCallback(
++    OTF2_EvtReaderCallbacks*              evtReaderCallbacks,
++    OTF2_EvtReaderCallback_MpiImrecv mpiImrecvCallback )
++{
++    if ( !evtReaderCallbacks )
++    {
++        return UTILS_ERROR( OTF2_ERROR_INVALID_ARGUMENT,
++                            "Invalid evtReaderCallbacks argument!" );
++    }
++
++    evtReaderCallbacks->mpi_imrecv = mpiImrecvCallback;
++
++    return OTF2_SUCCESS;
++}
+--- a/include/otf2/OTF2_EvtWriter.h
++++ b/include/otf2/OTF2_EvtWriter.h
+@@ -2450,6 +2450,97 @@
+                             OTF2_CommRef        communicator );
+ 
+ 
++
++/** @brief Records a MpiProbe event.
++ *
++ *  Matched-probe compatibility record; see viewer offline evidence.
++ *  
++ *  @param writer        Writer object.
++ *  @param attributeList Generic attributes for the event.
++ *  @param time          The time for this event.
++ *  @param sender        Recorded sender.
++ *  @param communicator  Communicator reference. References a @eref{Comm}, or a
++ *                       @eref{InterComm} definition and will be mapped to
++ *                       the global definition if a mapping table of type
++ *                       @eref{OTF2_MAPPING_COMM} is available.
++ *  @param tag           Recorded tag.
++ *  @param messageId     Recorded messageId.
++ *
++ *  @since Version 3.2
++ *
++ *  @return @eref{OTF2_SUCCESS} if successful, an error code if an error occurs.
++ */
++OTF2_ErrorCode
++OTF2_EvtWriter_MpiProbe( OTF2_EvtWriter*     writer,
++                               OTF2_AttributeList* attributeList,
++                               OTF2_TimeStamp      time,
++uint32_t sender,
++OTF2_CommRef communicator,
++uint32_t tag,
++uint64_t messageId );
++
++/** @brief Records a MpiMrecv event.
++ *
++ *  Matched-probe compatibility record; see viewer offline evidence.
++ *  
++ *  @param writer        Writer object.
++ *  @param attributeList Generic attributes for the event.
++ *  @param time          The time for this event.
++ *  @param messageId     Recorded messageId.
++ *  @param msgLength     Recorded msgLength.
++ *
++ *  @since Version 3.2
++ *
++ *  @return @eref{OTF2_SUCCESS} if successful, an error code if an error occurs.
++ */
++OTF2_ErrorCode
++OTF2_EvtWriter_MpiMrecv( OTF2_EvtWriter*     writer,
++                               OTF2_AttributeList* attributeList,
++                               OTF2_TimeStamp      time,
++uint64_t messageId,
++uint64_t msgLength );
++
++/** @brief Records a MpiImrecvRequest event.
++ *
++ *  Matched-probe compatibility record; see viewer offline evidence.
++ *  
++ *  @param writer        Writer object.
++ *  @param attributeList Generic attributes for the event.
++ *  @param time          The time for this event.
++ *  @param messageId     Recorded messageId.
++ *  @param requestId     Recorded requestId.
++ *
++ *  @since Version 3.2
++ *
++ *  @return @eref{OTF2_SUCCESS} if successful, an error code if an error occurs.
++ */
++OTF2_ErrorCode
++OTF2_EvtWriter_MpiImrecvRequest( OTF2_EvtWriter*     writer,
++                               OTF2_AttributeList* attributeList,
++                               OTF2_TimeStamp      time,
++uint64_t messageId,
++uint64_t requestId );
++
++/** @brief Records a MpiImrecv event.
++ *
++ *  Matched-probe compatibility record; see viewer offline evidence.
++ *  
++ *  @param writer        Writer object.
++ *  @param attributeList Generic attributes for the event.
++ *  @param time          The time for this event.
++ *  @param requestId     Recorded requestId.
++ *  @param msgLength     Recorded msgLength.
++ *
++ *  @since Version 3.2
++ *
++ *  @return @eref{OTF2_SUCCESS} if successful, an error code if an error occurs.
++ */
++OTF2_ErrorCode
++OTF2_EvtWriter_MpiImrecv( OTF2_EvtWriter*     writer,
++                               OTF2_AttributeList* attributeList,
++                               OTF2_TimeStamp      time,
++uint64_t requestId,
++uint64_t msgLength );
+ /** @brief Please give me a documentation.
+  *
+  *  @param writer   Writer object.
+--- a/src/OTF2_EvtWriter_inc.c
++++ b/src/OTF2_EvtWriter_inc.c
+@@ -6478,3 +6478,333 @@
+ 
+     return ret;
+ }
++
++OTF2_ErrorCode
++OTF2_EvtWriter_MpiProbe( OTF2_EvtWriter*     writerHandle,
++                               OTF2_AttributeList* attributeList,
++                               OTF2_TimeStamp      time,
++uint32_t sender,
++OTF2_CommRef communicator,
++uint32_t tag,
++uint64_t messageId )
++{
++    if ( !writerHandle )
++    {
++        return UTILS_ERROR( OTF2_ERROR_INVALID_ARGUMENT,
++                            "Invalid writerHandle argument." );
++    }
++
++    OTF2_ErrorCode ret;
++
++    /*
++     * Maximum record length is the record id byte, plus the individual sizes of the
++     * attributes (excluding the timestamp), and the size of the attribute list.
++     */
++    uint64_t record_length = 1;
++
++    /*
++     * The size of the attribute list, if any.
++     */
++    uint64_t attribute_list_size = otf2_attribute_list_get_size( attributeList );
++    record_length += attribute_list_size;
++
++    /*
++     * Maximum memory usage of pure record data (excluding timestamp, type ID,
++     * record length information, and optional attribute list).
++     */
++    uint64_t record_data_length = 0;
++
++    record_data_length += sizeof( uint32_t ) + 1; /* sender */
++    record_data_length += sizeof( OTF2_CommRef ) + 1; /* communicator */
++    record_data_length += sizeof( uint32_t ) + 1; /* tag */
++    record_data_length += sizeof( uint64_t ) + 1; /* messageId */
++    /* Finalize the upper bound of the record. */
++    record_length += record_data_length;
++
++    /*
++     * Additional bytes to store real record length. For records that exceed 255 bytes
++     * we need a maximum of 9 bytes to encode their length. Due to on-line compression
++     * real record length can differ from maximum record length.
++     */
++    record_length += 1;
++    if ( record_data_length >= UINT8_MAX )
++    {
++        record_length += 8;
++    }
++
++    ret = OTF2_Buffer_WriteTimeStamp( writerHandle->buffer,
++                                      time,
++                                      record_length );
++    if ( OTF2_SUCCESS != ret )
++    {
++        return ret;
++    }
++
++    /* Write only the attribute list, if it is not empty */
++    if ( attribute_list_size )
++    {
++        ret = otf2_attribute_list_write_to_buffer( attributeList,
++                                                   writerHandle->buffer );
++        if ( OTF2_SUCCESS != ret )
++        {
++            return ret;
++        }
++    }
++
++    OTF2_Buffer_WriteUint8( writerHandle->buffer, OTF2_EVENT_MPI_PROBE );
++
++    /* Write initial record length */
++    OTF2_Buffer_WriteInitialRecordLength( writerHandle->buffer, record_data_length );
++
++    OTF2_Buffer_WriteUint32( writerHandle->buffer, sender );
++    OTF2_Buffer_WriteUint32( writerHandle->buffer, communicator );
++    OTF2_Buffer_WriteUint32( writerHandle->buffer, tag );
++    OTF2_Buffer_WriteUint64( writerHandle->buffer, messageId );
++    /* Write real record length */
++    ret = OTF2_Buffer_WriteFinalRecordLength( writerHandle->buffer, record_data_length );
++
++    return ret;
++}
++
++OTF2_ErrorCode
++OTF2_EvtWriter_MpiMrecv( OTF2_EvtWriter*     writerHandle,
++                               OTF2_AttributeList* attributeList,
++                               OTF2_TimeStamp      time,
++uint64_t messageId,
++uint64_t msgLength )
++{
++    if ( !writerHandle )
++    {
++        return UTILS_ERROR( OTF2_ERROR_INVALID_ARGUMENT,
++                            "Invalid writerHandle argument." );
++    }
++
++    OTF2_ErrorCode ret;
++
++    /*
++     * Maximum record length is the record id byte, plus the individual sizes of the
++     * attributes (excluding the timestamp), and the size of the attribute list.
++     */
++    uint64_t record_length = 1;
++
++    /*
++     * The size of the attribute list, if any.
++     */
++    uint64_t attribute_list_size = otf2_attribute_list_get_size( attributeList );
++    record_length += attribute_list_size;
++
++    /*
++     * Maximum memory usage of pure record data (excluding timestamp, type ID,
++     * record length information, and optional attribute list).
++     */
++    uint64_t record_data_length = 0;
++
++    record_data_length += sizeof( uint64_t ) + 1; /* messageId */
++    record_data_length += sizeof( uint64_t ) + 1; /* msgLength */
++    /* Finalize the upper bound of the record. */
++    record_length += record_data_length;
++
++    /*
++     * Additional bytes to store real record length. For records that exceed 255 bytes
++     * we need a maximum of 9 bytes to encode their length. Due to on-line compression
++     * real record length can differ from maximum record length.
++     */
++    record_length += 1;
++    if ( record_data_length >= UINT8_MAX )
++    {
++        record_length += 8;
++    }
++
++    ret = OTF2_Buffer_WriteTimeStamp( writerHandle->buffer,
++                                      time,
++                                      record_length );
++    if ( OTF2_SUCCESS != ret )
++    {
++        return ret;
++    }
++
++    /* Write only the attribute list, if it is not empty */
++    if ( attribute_list_size )
++    {
++        ret = otf2_attribute_list_write_to_buffer( attributeList,
++                                                   writerHandle->buffer );
++        if ( OTF2_SUCCESS != ret )
++        {
++            return ret;
++        }
++    }
++
++    OTF2_Buffer_WriteUint8( writerHandle->buffer, OTF2_EVENT_MPI_MRECV );
++
++    /* Write initial record length */
++    OTF2_Buffer_WriteInitialRecordLength( writerHandle->buffer, record_data_length );
++
++    OTF2_Buffer_WriteUint64( writerHandle->buffer, messageId );
++    OTF2_Buffer_WriteUint64( writerHandle->buffer, msgLength );
++    /* Write real record length */
++    ret = OTF2_Buffer_WriteFinalRecordLength( writerHandle->buffer, record_data_length );
++
++    return ret;
++}
++
++OTF2_ErrorCode
++OTF2_EvtWriter_MpiImrecvRequest( OTF2_EvtWriter*     writerHandle,
++                               OTF2_AttributeList* attributeList,
++                               OTF2_TimeStamp      time,
++uint64_t messageId,
++uint64_t requestId )
++{
++    if ( !writerHandle )
++    {
++        return UTILS_ERROR( OTF2_ERROR_INVALID_ARGUMENT,
++                            "Invalid writerHandle argument." );
++    }
++
++    OTF2_ErrorCode ret;
++
++    /*
++     * Maximum record length is the record id byte, plus the individual sizes of the
++     * attributes (excluding the timestamp), and the size of the attribute list.
++     */
++    uint64_t record_length = 1;
++
++    /*
++     * The size of the attribute list, if any.
++     */
++    uint64_t attribute_list_size = otf2_attribute_list_get_size( attributeList );
++    record_length += attribute_list_size;
++
++    /*
++     * Maximum memory usage of pure record data (excluding timestamp, type ID,
++     * record length information, and optional attribute list).
++     */
++    uint64_t record_data_length = 0;
++
++    record_data_length += sizeof( uint64_t ) + 1; /* messageId */
++    record_data_length += sizeof( uint64_t ) + 1; /* requestId */
++    /* Finalize the upper bound of the record. */
++    record_length += record_data_length;
++
++    /*
++     * Additional bytes to store real record length. For records that exceed 255 bytes
++     * we need a maximum of 9 bytes to encode their length. Due to on-line compression
++     * real record length can differ from maximum record length.
++     */
++    record_length += 1;
++    if ( record_data_length >= UINT8_MAX )
++    {
++        record_length += 8;
++    }
++
++    ret = OTF2_Buffer_WriteTimeStamp( writerHandle->buffer,
++                                      time,
++                                      record_length );
++    if ( OTF2_SUCCESS != ret )
++    {
++        return ret;
++    }
++
++    /* Write only the attribute list, if it is not empty */
++    if ( attribute_list_size )
++    {
++        ret = otf2_attribute_list_write_to_buffer( attributeList,
++                                                   writerHandle->buffer );
++        if ( OTF2_SUCCESS != ret )
++        {
++            return ret;
++        }
++    }
++
++    OTF2_Buffer_WriteUint8( writerHandle->buffer, OTF2_EVENT_MPI_IMRECV_REQUEST );
++
++    /* Write initial record length */
++    OTF2_Buffer_WriteInitialRecordLength( writerHandle->buffer, record_data_length );
++
++    OTF2_Buffer_WriteUint64( writerHandle->buffer, messageId );
++    OTF2_Buffer_WriteUint64( writerHandle->buffer, requestId );
++    /* Write real record length */
++    ret = OTF2_Buffer_WriteFinalRecordLength( writerHandle->buffer, record_data_length );
++
++    return ret;
++}
++
++OTF2_ErrorCode
++OTF2_EvtWriter_MpiImrecv( OTF2_EvtWriter*     writerHandle,
++                               OTF2_AttributeList* attributeList,
++                               OTF2_TimeStamp      time,
++uint64_t requestId,
++uint64_t msgLength )
++{
++    if ( !writerHandle )
++    {
++        return UTILS_ERROR( OTF2_ERROR_INVALID_ARGUMENT,
++                            "Invalid writerHandle argument." );
++    }
++
++    OTF2_ErrorCode ret;
++
++    /*
++     * Maximum record length is the record id byte, plus the individual sizes of the
++     * attributes (excluding the timestamp), and the size of the attribute list.
++     */
++    uint64_t record_length = 1;
++
++    /*
++     * The size of the attribute list, if any.
++     */
++    uint64_t attribute_list_size = otf2_attribute_list_get_size( attributeList );
++    record_length += attribute_list_size;
++
++    /*
++     * Maximum memory usage of pure record data (excluding timestamp, type ID,
++     * record length information, and optional attribute list).
++     */
++    uint64_t record_data_length = 0;
++
++    record_data_length += sizeof( uint64_t ) + 1; /* requestId */
++    record_data_length += sizeof( uint64_t ) + 1; /* msgLength */
++    /* Finalize the upper bound of the record. */
++    record_length += record_data_length;
++
++    /*
++     * Additional bytes to store real record length. For records that exceed 255 bytes
++     * we need a maximum of 9 bytes to encode their length. Due to on-line compression
++     * real record length can differ from maximum record length.
++     */
++    record_length += 1;
++    if ( record_data_length >= UINT8_MAX )
++    {
++        record_length += 8;
++    }
++
++    ret = OTF2_Buffer_WriteTimeStamp( writerHandle->buffer,
++                                      time,
++                                      record_length );
++    if ( OTF2_SUCCESS != ret )
++    {
++        return ret;
++    }
++
++    /* Write only the attribute list, if it is not empty */
++    if ( attribute_list_size )
++    {
++        ret = otf2_attribute_list_write_to_buffer( attributeList,
++                                                   writerHandle->buffer );
++        if ( OTF2_SUCCESS != ret )
++        {
++            return ret;
++        }
++    }
++
++    OTF2_Buffer_WriteUint8( writerHandle->buffer, OTF2_EVENT_MPI_IMRECV );
++
++    /* Write initial record length */
++    OTF2_Buffer_WriteInitialRecordLength( writerHandle->buffer, record_data_length );
++
++    OTF2_Buffer_WriteUint64( writerHandle->buffer, requestId );
++    OTF2_Buffer_WriteUint64( writerHandle->buffer, msgLength );
++    /* Write real record length */
++    ret = OTF2_Buffer_WriteFinalRecordLength( writerHandle->buffer, record_data_length );
++
++    return ret;
++}
+--- a/include/otf2/OTF2_GlobalEvtReaderCallbacks.h
++++ b/include/otf2/OTF2_GlobalEvtReaderCallbacks.h
+@@ -4336,6 +4336,193 @@
+     OTF2_GlobalEvtReaderCallback_CommDestroy commDestroyCallback );
+ 
+ 
++
++/** @brief Callback for the MpiProbe event record.
++ *
++ *  Matched-probe compatibility record; see viewer offline evidence.
++ *  
++ *  @param locationID    The location where this event happened.
++ *  @param time          The time when this event happened.
++ *  @param userData      User data as set by
++ *                       @eref{OTF2_Reader_RegisterGlobalEvtCallbacks} or
++ *                       @eref{OTF2_GlobalEvtReader_SetCallbacks}.
++ *  @param attributeList Additional attributes for this event.
++ *  @param sender        Recorded sender.
++ *  @param communicator  Communicator reference. References a @eref{Comm}, or a
++ *                       @eref{InterComm} definition and will be mapped to
++ *                       the global definition if a mapping table of type
++ *                       @eref{OTF2_MAPPING_COMM} is available.
++ *  @param tag           Recorded tag.
++ *  @param messageId     Recorded messageId.
++ *
++ *  @since Version 3.2
++ *
++ *  @return @eref{OTF2_CALLBACK_SUCCESS} or @eref{OTF2_CALLBACK_INTERRUPT}.
++ */
++typedef OTF2_CallbackCode
++( *OTF2_GlobalEvtReaderCallback_MpiProbe )( OTF2_LocationRef    locationID,
++                                                  OTF2_TimeStamp      time,
++                                                  void*               userData,
++                                                  OTF2_AttributeList* attributeList,
++uint32_t sender,
++OTF2_CommRef communicator,
++uint32_t tag,
++uint64_t messageId );
++
++
++/** @brief Registers the callback for the MpiProbe event.
++ *  
++ *  @param globalEvtReaderCallbacks Struct for all callbacks.
++ *  @param mpiProbeCallback         Function which should be called for all
++ *                                  @eref{MpiProbe} definitions.
++ *
++ *  @since Version 3.2
++ *
++ *  @retbegin
++ *    @retcode{OTF2_SUCCESS, if successful}
++ *    @retcode{OTF2_ERROR_INVALID_ARGUMENT,
++ *             for an invalid @p defReaderCallbacks argument}
++ *  @retend
++ */
++OTF2_ErrorCode
++OTF2_GlobalEvtReaderCallbacks_SetMpiProbeCallback(
++    OTF2_GlobalEvtReaderCallbacks*              globalEvtReaderCallbacks,
++    OTF2_GlobalEvtReaderCallback_MpiProbe mpiProbeCallback );
++
++/** @brief Callback for the MpiMrecv event record.
++ *
++ *  Matched-probe compatibility record; see viewer offline evidence.
++ *  
++ *  @param locationID    The location where this event happened.
++ *  @param time          The time when this event happened.
++ *  @param userData      User data as set by
++ *                       @eref{OTF2_Reader_RegisterGlobalEvtCallbacks} or
++ *                       @eref{OTF2_GlobalEvtReader_SetCallbacks}.
++ *  @param attributeList Additional attributes for this event.
++ *  @param messageId     Recorded messageId.
++ *  @param msgLength     Recorded msgLength.
++ *
++ *  @since Version 3.2
++ *
++ *  @return @eref{OTF2_CALLBACK_SUCCESS} or @eref{OTF2_CALLBACK_INTERRUPT}.
++ */
++typedef OTF2_CallbackCode
++( *OTF2_GlobalEvtReaderCallback_MpiMrecv )( OTF2_LocationRef    locationID,
++                                                  OTF2_TimeStamp      time,
++                                                  void*               userData,
++                                                  OTF2_AttributeList* attributeList,
++uint64_t messageId,
++uint64_t msgLength );
++
++
++/** @brief Registers the callback for the MpiMrecv event.
++ *  
++ *  @param globalEvtReaderCallbacks Struct for all callbacks.
++ *  @param mpiMrecvCallback         Function which should be called for all
++ *                                  @eref{MpiMrecv} definitions.
++ *
++ *  @since Version 3.2
++ *
++ *  @retbegin
++ *    @retcode{OTF2_SUCCESS, if successful}
++ *    @retcode{OTF2_ERROR_INVALID_ARGUMENT,
++ *             for an invalid @p defReaderCallbacks argument}
++ *  @retend
++ */
++OTF2_ErrorCode
++OTF2_GlobalEvtReaderCallbacks_SetMpiMrecvCallback(
++    OTF2_GlobalEvtReaderCallbacks*              globalEvtReaderCallbacks,
++    OTF2_GlobalEvtReaderCallback_MpiMrecv mpiMrecvCallback );
++
++/** @brief Callback for the MpiImrecvRequest event record.
++ *
++ *  Matched-probe compatibility record; see viewer offline evidence.
++ *  
++ *  @param locationID    The location where this event happened.
++ *  @param time          The time when this event happened.
++ *  @param userData      User data as set by
++ *                       @eref{OTF2_Reader_RegisterGlobalEvtCallbacks} or
++ *                       @eref{OTF2_GlobalEvtReader_SetCallbacks}.
++ *  @param attributeList Additional attributes for this event.
++ *  @param messageId     Recorded messageId.
++ *  @param requestId     Recorded requestId.
++ *
++ *  @since Version 3.2
++ *
++ *  @return @eref{OTF2_CALLBACK_SUCCESS} or @eref{OTF2_CALLBACK_INTERRUPT}.
++ */
++typedef OTF2_CallbackCode
++( *OTF2_GlobalEvtReaderCallback_MpiImrecvRequest )( OTF2_LocationRef    locationID,
++                                                  OTF2_TimeStamp      time,
++                                                  void*               userData,
++                                                  OTF2_AttributeList* attributeList,
++uint64_t messageId,
++uint64_t requestId );
++
++
++/** @brief Registers the callback for the MpiImrecvRequest event.
++ *  
++ *  @param globalEvtReaderCallbacks Struct for all callbacks.
++ *  @param mpiImrecvRequestCallback Function which should be called for all
++ *                                  @eref{MpiImrecvRequest} definitions.
++ *
++ *  @since Version 3.2
++ *
++ *  @retbegin
++ *    @retcode{OTF2_SUCCESS, if successful}
++ *    @retcode{OTF2_ERROR_INVALID_ARGUMENT,
++ *             for an invalid @p defReaderCallbacks argument}
++ *  @retend
++ */
++OTF2_ErrorCode
++OTF2_GlobalEvtReaderCallbacks_SetMpiImrecvRequestCallback(
++    OTF2_GlobalEvtReaderCallbacks*              globalEvtReaderCallbacks,
++    OTF2_GlobalEvtReaderCallback_MpiImrecvRequest mpiImrecvRequestCallback );
++
++/** @brief Callback for the MpiImrecv event record.
++ *
++ *  Matched-probe compatibility record; see viewer offline evidence.
++ *  
++ *  @param locationID    The location where this event happened.
++ *  @param time          The time when this event happened.
++ *  @param userData      User data as set by
++ *                       @eref{OTF2_Reader_RegisterGlobalEvtCallbacks} or
++ *                       @eref{OTF2_GlobalEvtReader_SetCallbacks}.
++ *  @param attributeList Additional attributes for this event.
++ *  @param requestId     Recorded requestId.
++ *  @param msgLength     Recorded msgLength.
++ *
++ *  @since Version 3.2
++ *
++ *  @return @eref{OTF2_CALLBACK_SUCCESS} or @eref{OTF2_CALLBACK_INTERRUPT}.
++ */
++typedef OTF2_CallbackCode
++( *OTF2_GlobalEvtReaderCallback_MpiImrecv )( OTF2_LocationRef    locationID,
++                                                  OTF2_TimeStamp      time,
++                                                  void*               userData,
++                                                  OTF2_AttributeList* attributeList,
++uint64_t requestId,
++uint64_t msgLength );
++
++
++/** @brief Registers the callback for the MpiImrecv event.
++ *  
++ *  @param globalEvtReaderCallbacks Struct for all callbacks.
++ *  @param mpiImrecvCallback        Function which should be called for all
++ *                                  @eref{MpiImrecv} definitions.
++ *
++ *  @since Version 3.2
++ *
++ *  @retbegin
++ *    @retcode{OTF2_SUCCESS, if successful}
++ *    @retcode{OTF2_ERROR_INVALID_ARGUMENT,
++ *             for an invalid @p defReaderCallbacks argument}
++ *  @retend
++ */
++OTF2_ErrorCode
++OTF2_GlobalEvtReaderCallbacks_SetMpiImrecvCallback(
++    OTF2_GlobalEvtReaderCallbacks*              globalEvtReaderCallbacks,
++    OTF2_GlobalEvtReaderCallback_MpiImrecv mpiImrecvCallback );
+ #ifdef __cplusplus
+ }
+ #endif /* __cplusplus */
+--- a/src/OTF2_GlobalEvtReader_inc.c
++++ b/src/OTF2_GlobalEvtReader_inc.c
+@@ -2469,7 +2469,115 @@
+ }
+ 
+ 
+-static OTF2_ErrorCode
++static 
++inline OTF2_ErrorCode
++otf2_global_evt_reader_trigger_mpi_probe( const OTF2_GlobalEvtReader* reader,
++                                                OTF2_EvtReader*             evt_reader )
++{
++    OTF2_GenericEvent* event    = &evt_reader->current_event;
++    OTF2_MpiProbe* record = &event->record.mpi_probe;
++
++    OTF2_CallbackCode interrupt = OTF2_CALLBACK_SUCCESS;
++    if ( reader->reader_callbacks.mpi_probe )
++    {
++        interrupt = reader->reader_callbacks.mpi_probe( evt_reader->location_id,
++                                                              record->time,
++                                                              reader->user_data,
++                                                              &evt_reader->attribute_list,
++record->sender,
++record->communicator,
++record->tag,
++record->message_id );
++    }
++     /* Before the next event is read, the attribute list has to be cleaned up
++      * i.e. remove all attributes from the list. */
++    otf2_attribute_list_remove_all_attributes( &evt_reader->attribute_list );
++
++    return OTF2_CALLBACK_SUCCESS == interrupt
++           ? OTF2_SUCCESS
++           : OTF2_ERROR_INTERRUPTED_BY_CALLBACK;
++}
++
++static inline OTF2_ErrorCode
++otf2_global_evt_reader_trigger_mpi_mrecv( const OTF2_GlobalEvtReader* reader,
++                                                OTF2_EvtReader*             evt_reader )
++{
++    OTF2_GenericEvent* event    = &evt_reader->current_event;
++    OTF2_MpiMrecv* record = &event->record.mpi_mrecv;
++
++    OTF2_CallbackCode interrupt = OTF2_CALLBACK_SUCCESS;
++    if ( reader->reader_callbacks.mpi_mrecv )
++    {
++        interrupt = reader->reader_callbacks.mpi_mrecv( evt_reader->location_id,
++                                                              record->time,
++                                                              reader->user_data,
++                                                              &evt_reader->attribute_list,
++record->message_id,
++record->msg_length );
++    }
++     /* Before the next event is read, the attribute list has to be cleaned up
++      * i.e. remove all attributes from the list. */
++    otf2_attribute_list_remove_all_attributes( &evt_reader->attribute_list );
++
++    return OTF2_CALLBACK_SUCCESS == interrupt
++           ? OTF2_SUCCESS
++           : OTF2_ERROR_INTERRUPTED_BY_CALLBACK;
++}
++
++static inline OTF2_ErrorCode
++otf2_global_evt_reader_trigger_mpi_imrecv_request( const OTF2_GlobalEvtReader* reader,
++                                                OTF2_EvtReader*             evt_reader )
++{
++    OTF2_GenericEvent* event    = &evt_reader->current_event;
++    OTF2_MpiImrecvRequest* record = &event->record.mpi_imrecv_request;
++
++    OTF2_CallbackCode interrupt = OTF2_CALLBACK_SUCCESS;
++    if ( reader->reader_callbacks.mpi_imrecv_request )
++    {
++        interrupt = reader->reader_callbacks.mpi_imrecv_request( evt_reader->location_id,
++                                                              record->time,
++                                                              reader->user_data,
++                                                              &evt_reader->attribute_list,
++record->message_id,
++record->request_id );
++    }
++     /* Before the next event is read, the attribute list has to be cleaned up
++      * i.e. remove all attributes from the list. */
++    otf2_attribute_list_remove_all_attributes( &evt_reader->attribute_list );
++
++    return OTF2_CALLBACK_SUCCESS == interrupt
++           ? OTF2_SUCCESS
++           : OTF2_ERROR_INTERRUPTED_BY_CALLBACK;
++}
++
++static inline OTF2_ErrorCode
++otf2_global_evt_reader_trigger_mpi_imrecv( const OTF2_GlobalEvtReader* reader,
++                                                OTF2_EvtReader*             evt_reader )
++{
++    OTF2_GenericEvent* event    = &evt_reader->current_event;
++    OTF2_MpiImrecv* record = &event->record.mpi_imrecv;
++
++    OTF2_CallbackCode interrupt = OTF2_CALLBACK_SUCCESS;
++    if ( reader->reader_callbacks.mpi_imrecv )
++    {
++        interrupt = reader->reader_callbacks.mpi_imrecv( evt_reader->location_id,
++                                                              record->time,
++                                                              reader->user_data,
++                                                              &evt_reader->attribute_list,
++record->request_id,
++record->msg_length );
++    }
++     /* Before the next event is read, the attribute list has to be cleaned up
++      * i.e. remove all attributes from the list. */
++    otf2_attribute_list_remove_all_attributes( &evt_reader->attribute_list );
++
++    return OTF2_CALLBACK_SUCCESS == interrupt
++           ? OTF2_SUCCESS
++           : OTF2_ERROR_INTERRUPTED_BY_CALLBACK;
++}
++
++static
++OTF2_ErrorCode
+ otf2_global_evt_reader_trigger_callback( const OTF2_GlobalEvtReader* reader,
+                                          OTF2_EvtReader*             evt_reader )
+ {
+@@ -2794,7 +2902,25 @@
+                                                                evt_reader );
+ 
+         case OTF2_EVENT_COMM_DESTROY:
+-            return otf2_global_evt_reader_trigger_comm_destroy( reader,
++            return otf2_global_evt_reader_trigger_comm_destroy
++( reader,
++                                                                   evt_reader );
++
++        case OTF2_EVENT_MPI_PROBE:
++            return otf2_global_evt_reader_trigger_mpi_probe( reader,
++                                                                   evt_reader );
++
++        case OTF2_EVENT_MPI_MRECV:
++            return otf2_global_evt_reader_trigger_mpi_mrecv( reader,
++                                                                   evt_reader );
++
++        case OTF2_EVENT_MPI_IMRECV_REQUEST:
++            return otf2_global_evt_reader_trigger_mpi_imrecv_request( reader,
++                                                                   evt_reader );
++
++        case OTF2_EVENT_MPI_IMRECV:
++            return otf2_global_evt_reader_trigger_mpi_imrecv
++( reader,
+                                                                 evt_reader );
+ 
+         default:
+@@ -4145,3 +4271,67 @@
+ 
+     return OTF2_SUCCESS;
+ }
++
++OTF2_ErrorCode
++OTF2_GlobalEvtReaderCallbacks_SetMpiProbeCallback(
++    OTF2_GlobalEvtReaderCallbacks*              globalEvtReaderCallbacks,
++    OTF2_GlobalEvtReaderCallback_MpiProbe mpiProbeCallback )
++{
++    if ( !globalEvtReaderCallbacks )
++    {
++        return UTILS_ERROR( OTF2_ERROR_INVALID_ARGUMENT,
++                             "Invalid globalEvtReaderCallback argument!" );
++    }
++
++    globalEvtReaderCallbacks->mpi_probe = mpiProbeCallback;
++
++    return OTF2_SUCCESS;
++}
++
++OTF2_ErrorCode
++OTF2_GlobalEvtReaderCallbacks_SetMpiMrecvCallback(
++    OTF2_GlobalEvtReaderCallbacks*              globalEvtReaderCallbacks,
++    OTF2_GlobalEvtReaderCallback_MpiMrecv mpiMrecvCallback )
++{
++    if ( !globalEvtReaderCallbacks )
++    {
++        return UTILS_ERROR( OTF2_ERROR_INVALID_ARGUMENT,
++                             "Invalid globalEvtReaderCallback argument!" );
++    }
++
++    globalEvtReaderCallbacks->mpi_mrecv = mpiMrecvCallback;
++
++    return OTF2_SUCCESS;
++}
++
++OTF2_ErrorCode
++OTF2_GlobalEvtReaderCallbacks_SetMpiImrecvRequestCallback(
++    OTF2_GlobalEvtReaderCallbacks*              globalEvtReaderCallbacks,
++    OTF2_GlobalEvtReaderCallback_MpiImrecvRequest mpiImrecvRequestCallback )
++{
++    if ( !globalEvtReaderCallbacks )
++    {
++        return UTILS_ERROR( OTF2_ERROR_INVALID_ARGUMENT,
++                             "Invalid globalEvtReaderCallback argument!" );
++    }
++
++    globalEvtReaderCallbacks->mpi_imrecv_request = mpiImrecvRequestCallback;
++
++    return OTF2_SUCCESS;
++}
++
++OTF2_ErrorCode
++OTF2_GlobalEvtReaderCallbacks_SetMpiImrecvCallback(
++    OTF2_GlobalEvtReaderCallbacks*              globalEvtReaderCallbacks,
++    OTF2_GlobalEvtReaderCallback_MpiImrecv mpiImrecvCallback )
++{
++    if ( !globalEvtReaderCallbacks )
++    {
++        return UTILS_ERROR( OTF2_ERROR_INVALID_ARGUMENT,
++                             "Invalid globalEvtReaderCallback argument!" );
++    }
++
++    globalEvtReaderCallbacks->mpi_imrecv = mpiImrecvCallback;
++
++    return OTF2_SUCCESS;
++}
+--- a/include/otf2/OTF2_EventSizeEstimator.h
++++ b/include/otf2/OTF2_EventSizeEstimator.h
+@@ -1333,6 +1333,50 @@
+ OTF2_EventSizeEstimator_GetSizeOfCommDestroyEvent( OTF2_EventSizeEstimator* estimator );
+ 
+ 
++
++/** @brief Calculates the size estimate for the MpiProbe event.
++ *  
++ *  @param estimator Estimator object.
++ *
++ *  @since Version 3.2
++ *
++ *  @return The estimated size.
++ */
++size_t
++OTF2_EventSizeEstimator_GetSizeOfMpiProbeEvent( OTF2_EventSizeEstimator* estimator );
++
++/** @brief Calculates the size estimate for the MpiMrecv event.
++ *  
++ *  @param estimator Estimator object.
++ *
++ *  @since Version 3.2
++ *
++ *  @return The estimated size.
++ */
++size_t
++OTF2_EventSizeEstimator_GetSizeOfMpiMrecvEvent( OTF2_EventSizeEstimator* estimator );
++
++/** @brief Calculates the size estimate for the MpiImrecvRequest event.
++ *  
++ *  @param estimator Estimator object.
++ *
++ *  @since Version 3.2
++ *
++ *  @return The estimated size.
++ */
++size_t
++OTF2_EventSizeEstimator_GetSizeOfMpiImrecvRequestEvent( OTF2_EventSizeEstimator* estimator );
++
++/** @brief Calculates the size estimate for the MpiImrecv event.
++ *  
++ *  @param estimator Estimator object.
++ *
++ *  @since Version 3.2
++ *
++ *  @return The estimated size.
++ */
++size_t
++OTF2_EventSizeEstimator_GetSizeOfMpiImrecvEvent( OTF2_EventSizeEstimator* estimator );
+ #ifdef __cplusplus
+ }
+ #endif /* __cplusplus */
+--- a/src/OTF2_EventSizeEstimator.c
++++ b/src/OTF2_EventSizeEstimator.c
+@@ -3899,3 +3899,151 @@
+ 
+     return record_length + record_data_length;
+ }
++
++size_t
++OTF2_EventSizeEstimator_GetSizeOfMpiProbeEvent( OTF2_EventSizeEstimator* estimator )
++{
++    if ( !estimator )
++    {
++        UTILS_ERROR( OTF2_ERROR_INVALID_ARGUMENT,
++                     "Invalid estimator argument." );
++        /* You get what you deserve */
++        return 0;
++    }
++
++    /* account the record id */
++    size_t record_length = 1;
++
++    /* Calculate the real upper bound, which is used for the record-length-byte
++     * calculation
++     */
++    size_t record_data_length = 0;
++    record_data_length += sizeof( uint32_t ) + 1; /* sender */
++    record_data_length += sizeof( OTF2_CommRef ) + 1; /* communicator */
++    record_data_length += sizeof( uint32_t ) + 1; /* tag */
++    record_data_length += sizeof( uint64_t ) + 1; /* messageId */
++    /* record length byte */
++    record_length += 1;
++    if ( record_data_length >= UINT8_MAX )
++    {
++        record_length += 8;
++    }
++
++    /* Re-do the calculation, but honor known upper bounds for references to
++     * definitions.
++     */
++    record_data_length = 0;
++    record_data_length += sizeof( uint32_t ) + 1; /* sender */
++    record_data_length += estimator->estimate_for_comms; /* communicator */
++    record_data_length += sizeof( uint32_t ) + 1; /* tag */
++    record_data_length += sizeof( uint64_t ) + 1; /* messageId */
++    return record_length + record_data_length;
++}
++
++size_t
++OTF2_EventSizeEstimator_GetSizeOfMpiMrecvEvent( OTF2_EventSizeEstimator* estimator )
++{
++    if ( !estimator )
++    {
++        UTILS_ERROR( OTF2_ERROR_INVALID_ARGUMENT,
++                     "Invalid estimator argument." );
++        /* You get what you deserve */
++        return 0;
++    }
++
++    /* account the record id */
++    size_t record_length = 1;
++
++    /* Calculate the real upper bound, which is used for the record-length-byte
++     * calculation
++     */
++    size_t record_data_length = 0;
++    record_data_length += sizeof( uint64_t ) + 1; /* messageId */
++    record_data_length += sizeof( uint64_t ) + 1; /* msgLength */
++    /* record length byte */
++    record_length += 1;
++    if ( record_data_length >= UINT8_MAX )
++    {
++        record_length += 8;
++    }
++
++    /* Re-do the calculation, but honor known upper bounds for references to
++     * definitions.
++     */
++    record_data_length = 0;
++    record_data_length += sizeof( uint64_t ) + 1; /* messageId */
++    record_data_length += sizeof( uint64_t ) + 1; /* msgLength */
++    return record_length + record_data_length;
++}
++
++size_t
++OTF2_EventSizeEstimator_GetSizeOfMpiImrecvRequestEvent( OTF2_EventSizeEstimator* estimator )
++{
++    if ( !estimator )
++    {
++        UTILS_ERROR( OTF2_ERROR_INVALID_ARGUMENT,
++                     "Invalid estimator argument." );
++        /* You get what you deserve */
++        return 0;
++    }
++
++    /* account the record id */
++    size_t record_length = 1;
++
++    /* Calculate the real upper bound, which is used for the record-length-byte
++     * calculation
++     */
++    size_t record_data_length = 0;
++    record_data_length += sizeof( uint64_t ) + 1; /* messageId */
++    record_data_length += sizeof( uint64_t ) + 1; /* requestId */
++    /* record length byte */
++    record_length += 1;
++    if ( record_data_length >= UINT8_MAX )
++    {
++        record_length += 8;
++    }
++
++    /* Re-do the calculation, but honor known upper bounds for references to
++     * definitions.
++     */
++    record_data_length = 0;
++    record_data_length += sizeof( uint64_t ) + 1; /* messageId */
++    record_data_length += sizeof( uint64_t ) + 1; /* requestId */
++    return record_length + record_data_length;
++}
++
++size_t
++OTF2_EventSizeEstimator_GetSizeOfMpiImrecvEvent( OTF2_EventSizeEstimator* estimator )
++{
++    if ( !estimator )
++    {
++        UTILS_ERROR( OTF2_ERROR_INVALID_ARGUMENT,
++                     "Invalid estimator argument." );
++        /* You get what you deserve */
++        return 0;
++    }
++
++    /* account the record id */
++    size_t record_length = 1;
++
++    /* Calculate the real upper bound, which is used for the record-length-byte
++     * calculation
++     */
++    size_t record_data_length = 0;
++    record_data_length += sizeof( uint64_t ) + 1; /* requestId */
++    record_data_length += sizeof( uint64_t ) + 1; /* msgLength */
++    /* record length byte */
++    record_length += 1;
++    if ( record_data_length >= UINT8_MAX )
++    {
++        record_length += 8;
++    }
++
++    /* Re-do the calculation, but honor known upper bounds for references to
++     * definitions.
++     */
++    record_data_length = 0;
++    record_data_length += sizeof( uint64_t ) + 1; /* requestId */
++    record_data_length += sizeof( uint64_t ) + 1; /* msgLength */
++    return record_length + record_data_length;
++}
+--- a/share/otf2/otf2.events
++++ b/share/otf2/otf2.events
+@@ -1710,3 +1710,11 @@
+         'communicator'
+     ),
+     since=Version(3,0))
++
++EventRecord("Matched-probe compatibility record; see viewer offline evidence.",89,"MpiProbe",Attribute("Recorded sender.",uint32_t,"sender"),CommAttribute("Communicator reference.","communicator"),Attribute("Recorded tag.",uint32_t,"tag"),Attribute("Recorded messageId.",uint64_t,"messageId"),since=Version(3,2))
++
++EventRecord("Matched-probe compatibility record; see viewer offline evidence.",90,"MpiMrecv",Attribute("Recorded messageId.",uint64_t,"messageId"),Attribute("Recorded msgLength.",uint64_t,"msgLength"),since=Version(3,2))
++
++EventRecord("Matched-probe compatibility record; see viewer offline evidence.",91,"MpiImrecvRequest",Attribute("Recorded messageId.",uint64_t,"messageId"),Attribute("Recorded requestId.",uint64_t,"requestId"),since=Version(3,2))
++
++EventRecord("Matched-probe compatibility record; see viewer offline evidence.",92,"MpiImrecv",Attribute("Recorded requestId.",uint64_t,"requestId"),Attribute("Recorded msgLength.",uint64_t,"msgLength"),since=Version(3,2))

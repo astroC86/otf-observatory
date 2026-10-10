@@ -1,0 +1,22 @@
+{
+  "name": "otf-observatory",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node web/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test:browser": "node web/build.mjs && node tests/browser/run.mjs"
+  },
+  "devDependencies": {
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "esbuild": "0.28.1",
+    "typescript": "6.0.3",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "prettier": "3.9.5",
+    "playwright": "1.64.0",
+    "@tanstack/react-query": "5.101.2",
+    "zustand": "5.0.14"
+  }
+}
